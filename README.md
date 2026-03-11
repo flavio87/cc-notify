@@ -1,8 +1,16 @@
 # cc-notify
 
-Phone notifications when Claude Code (or other AI agents) need your attention on a remote server.
+Phone notifications when Claude Code (or other AI agents) need your attention on a remote server — with **one-tap deep links** to jump straight into the right tmux session from your phone.
 
-You're running Claude Code in tmux on a VPS. You walk away. Claude finishes, or needs permission, or hits an error. **cc-notify sends a push notification to your phone** so you know exactly when to come back — with context about what happened and a tap-to-connect deep link.
+You're running Claude Code in tmux on a VPS. You walk away. Claude finishes, or needs permission, or hits an error. **cc-notify sends a push notification to your phone** with context about what happened. Tap the notification and you're SSH'd into the exact tmux pane where Claude is waiting — no typing, no remembering which session, no manual SSH.
+
+## Key features
+
+- **Push notifications** via [ntfy](https://ntfy.sh) with rich context (task, last response, project name)
+- **Tap-to-connect deep links** via [Blink Shell](https://blink.sh) — one tap from notification to SSH session
+- **Smart deduplication** — one notification per project, cooldown resets on interaction
+- **Multi-agent support** via optional [NTM](https://github.com/cyanheads/ntm) polling
+- **Dual delivery** — ntfy + optional Slack webhook
 
 ## How it works
 
@@ -27,12 +35,117 @@ Both layers deliver via [ntfy](https://ntfy.sh) (push notifications) and optiona
 
 You get **one notification per project** when something needs attention, then silence until the cooldown expires (24h default). The cooldown resets when you interact with the session — so you'll get notified again next time it's idle.
 
+## Tap-to-connect deep links
+
+The deep link system is the core UX of cc-notify. When configured, every notification includes a `blinkshell://` URL that opens [Blink Shell](https://blink.sh) on iOS, SSH's into your server, and attaches to the exact tmux session and pane where Claude is waiting — all from a single tap.
+
+### How the deep link flow works
+
+```mermaid
+stateDiagram-v2
+    [*] --> CC_Event: Claude Code fires hook<br/>(Notification / Stop)
+
+    CC_Event --> SessionDiscovery: tmux-notify.sh runs
+
+    state SessionDiscovery {
+        [*] --> WalkProcessTree: Walk PID tree upward
+        WalkProcessTree --> FoundSession: Match PID to<br/>tmux pane
+        WalkProcessTree --> FallbackProject: No match →<br/>use project name
+        FoundSession --> [*]
+        FallbackProject --> [*]
+    }
+
+    SessionDiscovery --> BuildURL: Session + pane index known
+
+    state BuildURL {
+        [*] --> CheckBlinkKey: BLINK_KEY set?
+        CheckBlinkKey --> Construct: Yes → build SSH command
+        CheckBlinkKey --> NoLink: No → skip deep link
+        Construct --> URLEncode: python3 urllib.parse.quote()
+        URLEncode --> BlinkURL: blinkshell://run?key=KEY&cmd=...
+        BlinkURL --> [*]
+        NoLink --> [*]
+    }
+
+    BuildURL --> SendNotification: Notification with deep link
+
+    state SendNotification {
+        [*] --> NtfyRequest: POST to ntfy server
+        NtfyRequest --> SetHeaders: Click: blink_url<br/>Actions: view, Connect, blink_url
+        SetHeaders --> Delivered: Push notification sent
+        Delivered --> [*]
+    }
+
+    SendNotification --> PhoneNotification: Notification arrives on phone
+
+    state PhoneNotification {
+        [*] --> UserTaps: User taps notification<br/>or "Connect" button
+        UserTaps --> BlinkOpens: iOS opens<br/>blinkshell:// URL
+        BlinkOpens --> [*]
+    }
+
+    PhoneNotification --> MobileAttach: Blink Shell executes SSH command
+
+    state MobileAttach {
+        [*] --> CleanStale: Kill orphaned mob-* sessions
+        CleanStale --> ValidateSession: Target session exists?
+        ValidateSession --> CreateGrouped: Yes → tmux new-session -t SESSION -s mob-PID
+        ValidateSession --> Error: No → exit with error
+        CreateGrouped --> ConfigureViewport: window-size latest<br/>status off
+        ConfigureViewport --> SelectPane: select-pane + zoom hook
+        SelectPane --> Attach: tmux attach
+        Attach --> [*]
+    }
+
+    MobileAttach --> Connected: User is in the right<br/>tmux pane, zoomed
+
+    Connected --> [*]: Session ends or<br/>user detaches<br/>(mob-* cleaned up on exit)
+```
+
+### What happens when you tap
+
+1. **Notification arrives** — ntfy shows the notification with a "Connect" action button
+2. **Tap opens Blink** — iOS launches Blink Shell via the `blinkshell://run?key=...&cmd=...` URL
+3. **SSH connects** — Blink runs `ssh -t user@host tmux-mobile-attach.sh SESSION PANE`
+4. **Mobile viewport created** — A grouped tmux session (`mob-PID`) gives you an independent viewport sized for your phone screen
+5. **Pane zoomed** — The exact pane where Claude is waiting gets selected and zoomed to fill the screen
+6. **Cleanup on exit** — When you detach, the `mob-*` session is automatically destroyed
+
+### Why grouped sessions?
+
+The mobile attach script creates a *grouped* tmux session (`mob-$$`) rather than attaching directly. This means:
+
+- Your desktop terminal keeps its layout and dimensions untouched
+- The mobile viewport adapts to your phone's screen size independently
+- Multiple mobile connections don't interfere with each other
+- Stale connections from dropped SSH sessions are cleaned up automatically
+
+### Requirements for deep links
+
+- [Blink Shell](https://blink.sh) installed on iOS
+- `BLINK_KEY` set in config (find it in Blink Settings > x-callback-url)
+- `SSH_USER` and `SSH_HOST` pointing to your VPS (can be a Tailscale hostname)
+
+> **Without Blink Shell:** Notifications still work — you just won't get the tap-to-connect button. You can still SSH in manually using the session info in the notification body.
+
+<!-- TODO: Add screenshots showing the full user flow:
+  1. Notification appearing on iOS lock screen
+  2. The "Connect" action button
+  3. Blink Shell opening and connecting
+  4. The tmux pane zoomed on mobile
+  Screenshots should go in a docs/images/ directory.
+-->
+
+<!-- TODO: Add a short (~30s) video walkthrough showing the tap-to-connect
+  experience end-to-end. Host on GitHub or link to a public URL.
+-->
+
 ## Prerequisites
 
 - **Required:** `jq`, `curl`, `tmux`, `python3`
 - **Required:** [ntfy](https://ntfy.sh) app on your phone (iOS/Android)
+- **Recommended:** [Blink Shell](https://blink.sh) — iOS SSH client for tap-to-connect deep links
 - **Optional:** [NTM](https://github.com/cyanheads/ntm) — needed for the multi-agent monitor
-- **Optional:** [Blink Shell](https://blink.sh) — iOS SSH client for tap-to-connect deep links
 
 ## Installation
 
@@ -182,7 +295,6 @@ Edit `server/server.yml` with your domain, then set `NTFY_SERVER` in your config
 
 ## Optional integrations
 
-- **Blink Shell** (iOS): Tap-to-connect deep links that SSH into the right tmux session and pane. Set `BLINK_KEY` in config.
 - **Slack**: Dual delivery via incoming webhook. Set `SLACK_WEBHOOK_URL` in config.
 - **FrankenTerm**: File watcher integration via the `ft-watch` systemd unit. See `systemd/ft-watch.service`.
 - **NTM**: Multi-agent session management. The monitor script polls NTM health for state transitions. Not required for basic CC notifications.
