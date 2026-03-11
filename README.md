@@ -61,8 +61,8 @@ stateDiagram-v2
         [*] --> CheckBlinkKey: BLINK_KEY set?
         CheckBlinkKey --> Construct: Yes → build SSH command
         CheckBlinkKey --> NoLink: No → skip deep link
-        Construct --> URLEncode: python3 urllib.parse.quote()
-        URLEncode --> BlinkURL: blinkshell://run?key=KEY&cmd=...
+        Construct --> URLEncode: URL-encode via Python
+        URLEncode --> BlinkURL: blink URL with key + encoded cmd
         BlinkURL --> [*]
         NoLink --> [*]
     }
@@ -71,7 +71,7 @@ stateDiagram-v2
 
     state SendNotification {
         [*] --> NtfyRequest: POST to ntfy server
-        NtfyRequest --> SetHeaders: Click: blink_url<br/>Actions: view, Connect, blink_url
+        NtfyRequest --> SetHeaders: Set Click + Actions<br/>headers with blink URL
         SetHeaders --> Delivered: Push notification sent
         Delivered --> [*]
     }
@@ -80,7 +80,7 @@ stateDiagram-v2
 
     state PhoneNotification {
         [*] --> UserTaps: User taps notification<br/>or "Connect" button
-        UserTaps --> BlinkOpens: iOS opens<br/>blinkshell:// URL
+        UserTaps --> BlinkOpens: iOS opens<br/>Blink Shell deep link
         BlinkOpens --> [*]
     }
 
@@ -89,7 +89,7 @@ stateDiagram-v2
     state MobileAttach {
         [*] --> CleanStale: Kill orphaned mob-* sessions
         CleanStale --> ValidateSession: Target session exists?
-        ValidateSession --> CreateGrouped: Yes → tmux new-session -t SESSION -s mob-PID
+        ValidateSession --> CreateGrouped: Yes → create grouped mob-PID session
         ValidateSession --> Error: No → exit with error
         CreateGrouped --> ConfigureViewport: window-size latest<br/>status off
         ConfigureViewport --> SelectPane: select-pane + zoom hook
