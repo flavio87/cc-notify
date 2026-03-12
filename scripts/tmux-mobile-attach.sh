@@ -121,6 +121,13 @@ if ! tmux new-session -d -t "$SESSION" -s "$S" 2>>"$LOG"; then
     exit
 fi
 log "Grouped session $S created OK"
+
+# Release the lock now — the establishment race is over.
+# Holding it for the full session lifetime would block future taps while
+# Blink keeps this SSH connection alive in the background.
+flock -u 200
+log "Lock released (establishment complete)"
+
 log "Sessions after new-session:"
 log_sessions
 
