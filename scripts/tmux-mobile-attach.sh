@@ -143,11 +143,15 @@ if [[ -n "$PANE" ]]; then
     log "Selecting pane $PANE on $S"
     tmux select-pane -t "$S:.$PANE" 2>>"$LOG" && log "select-pane OK" || log "select-pane FAILED"
 
-    # Zoom via client-attached hook — pre-attach zoom is cancelled by the layout
-    # recalculation that happens when the mobile client connects.
-    log "Setting client-attached hook to zoom pane $PANE"
+    # Zoom after a short sleep so the phone's terminal dimensions have been
+    # negotiated. client-attached fires before the SSH terminal sends its size;
+    # window-size latest then resizes the window to phone dims, which cancels
+    # any zoom set before that resize settles. 0.3s is enough for the XTERMINAL
+    # handshake to complete while remaining imperceptible to the user.
+    _zoom_cmd="sleep 0.3 && tmux select-pane -t ${S}:.${PANE} && tmux resize-pane -Z -t ${S}:.${PANE} && echo [zoom-after-sleep OK] >> ${LOG} || echo [zoom-after-sleep FAILED] >> ${LOG}"
+    log "Setting client-attached hook to zoom pane $PANE (after 0.3s resize settle)"
     tmux set-hook -t "$S" client-attached \
-        "run-shell 'echo \"[\\$(date +%H:%M:%S.%3N)] zoom hook fired: pane=$PANE\" >> $LOG' ; select-pane -t .$PANE ; resize-pane -Z -t .$PANE" \
+        "run-shell '$_zoom_cmd'" \
         2>>"$LOG" && log "zoom hook set OK" || log "zoom hook set FAILED"
 fi
 
