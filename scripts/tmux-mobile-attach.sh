@@ -42,6 +42,15 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
     exit 1
 fi
 
+# Prevent duplicate mob sessions when Blink opens two SSH connections for one tap.
+# Second connection exits immediately — the first one's session handles everything.
+LOCK_FILE="/tmp/cc-notify-mobile-${SESSION}.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    log "Another connection to $SESSION is already establishing — exiting duplicate"
+    exit 0
+fi
+
 S="mob-$$"
 cleanup() {
     log "Cleanup: killing $S"
