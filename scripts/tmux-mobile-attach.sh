@@ -148,6 +148,7 @@ if [[ -n "$PANE" ]]; then
     # the SSH terminal negotiates its size. A bg job is simpler and more
     # debuggable. The job runs while tmux attach blocks the main script.
     (
+        log() { echo "[$(ts)] $*" >> "$LOG"; }  # file-only in bg job — no stdout bleed into tmux
         sleep 0.5
         # resize-pane -Z is a toggle. Check current state before deciding what to do.
         # On reconnect the zoom from the previous mob session persists on the shared
