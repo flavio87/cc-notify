@@ -26,7 +26,27 @@ log() { echo "[$(date '+%H:%M:%S')] $*" >> "$LOG"; echo "$*"; }
 
 log "=== Mobile attach: SESSION=$SESSION PANE=$PANE PID=$$ ==="
 
-# Kill any existing mob sessions for this parent — attached or not.
+# Validate that the target session actually exists before doing anything
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    log "ERROR: Session '$SESSION' does not exist"
+    tmux list-sessions -F '  #{session_name}' 2>/dev/null >> "$LOG"
+    echo "Session '$SESSION' no longer exists. Available sessions:"
+    tmux list-sessions -F '  #{session_name}' 2>/dev/null
+    exit 1
+fi
+
+# Acquire lock BEFORE killing or creating any sessions.
+# Blink opens two SSH connections per tap. The loser exits here immediately
+# without touching sessions — this prevents the loser's kill loop from
+# destroying the mob session the winner just created.
+LOCK_FILE="/tmp/cc-notify-mobile-${SESSION}.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    log "Another connection to $SESSION is already establishing — exiting duplicate"
+    exit 0
+fi
+
+# We won the lock. Now kill any existing mob sessions for this parent.
 # Blink keeps SSH connections alive when backgrounded, so "attached" mob
 # sessions accumulate. A new deep link tap means the user wants a fresh
 # connection, so we replace the old one unconditionally.
@@ -42,24 +62,6 @@ for s in $(tmux list-sessions -F '#{session_name} #{session_attached}' 2>/dev/nu
     log "Cleaning stale session: $s"
     tmux kill-session -t "$s" 2>/dev/null
 done
-
-# Validate that the target session actually exists before creating a grouped session
-if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-    log "ERROR: Session '$SESSION' does not exist"
-    tmux list-sessions -F '  #{session_name}' 2>/dev/null >> "$LOG"
-    echo "Session '$SESSION' no longer exists. Available sessions:"
-    tmux list-sessions -F '  #{session_name}' 2>/dev/null
-    exit 1
-fi
-
-# Prevent duplicate mob sessions when Blink opens two SSH connections for one tap.
-# Second connection exits immediately — the first one's session handles everything.
-LOCK_FILE="/tmp/cc-notify-mobile-${SESSION}.lock"
-exec 200>"$LOCK_FILE"
-if ! flock -n 200; then
-    log "Another connection to $SESSION is already establishing — exiting duplicate"
-    exit 0
-fi
 
 S="mob-$$"
 cleanup() {
