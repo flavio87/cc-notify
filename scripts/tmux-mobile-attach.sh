@@ -26,7 +26,17 @@ log() { echo "[$(date '+%H:%M:%S')] $*" >> "$LOG"; echo "$*"; }
 
 log "=== Mobile attach: SESSION=$SESSION PANE=$PANE PID=$$ ==="
 
-# Clean up any stale mob- sessions (unattached, from previous dropped connections)
+# Kill any existing mob sessions for this parent — attached or not.
+# Blink keeps SSH connections alive when backgrounded, so "attached" mob
+# sessions accumulate. A new deep link tap means the user wants a fresh
+# connection, so we replace the old one unconditionally.
+for s in $(tmux list-sessions -F '#{session_name} #{session_group}' 2>/dev/null \
+    | awk -v parent="$SESSION" '/^mob-/ && $2 == parent {print $1}'); do
+    log "Replacing existing mob session: $s"
+    tmux kill-session -t "$s" 2>/dev/null
+done
+
+# Also clean up stale mob sessions for other parents (unattached only)
 for s in $(tmux list-sessions -F '#{session_name} #{session_attached}' 2>/dev/null \
     | awk '/^mob-/ && $2 == "0" {print $1}'); do
     log "Cleaning stale session: $s"
@@ -75,6 +85,11 @@ cleanup() {
           done
 }
 trap cleanup EXIT
+
+# Pin the real session to window-size largest so mobile clients can never
+# shrink the desktop view. The mob session uses window-size latest (set below)
+# so mobile adapts to phone dimensions independently.
+tmux set -t "$SESSION" window-size largest 2>/dev/null || true
 
 log "Creating grouped session $S -> $SESSION"
 if ! tmux new-session -d -t "$SESSION" -s "$S" 2>>"$LOG"; then
