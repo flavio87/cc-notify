@@ -11,25 +11,28 @@ SESSION="${1:?Usage: tmux-mobile-attach.sh SESSION [PANE_INDEX]}"
 PANE="${2:-}"
 LOG="/tmp/tmux-mobile-attach.log"
 
+ts() { date '+%H:%M:%S.%3N'; }
+log() { echo "[$(ts)] $*" >> "$LOG"; echo "$*"; }
+log_sessions() { tmux list-sessions -F '  #{session_name} group=#{session_group} attached=#{session_attached}' 2>/dev/null >> "$LOG"; }
+
 # Safety net: if a stale deep link targets a mob-* session, resolve to its parent
 if [[ "$SESSION" == mob-* ]]; then
     _parent=$(tmux display-message -t "$SESSION" -p '#{session_group}' 2>/dev/null)
     if [[ -n "$_parent" && "$_parent" != "$SESSION" ]]; then
-        echo "[$(date '+%H:%M:%S')] Redirecting mob- target $SESSION -> $_parent" >> "$LOG"
+        echo "[$(ts)] Redirecting mob- target $SESSION -> $_parent" >> "$LOG"
         SESSION="$_parent"
     else
-        echo "[$(date '+%H:%M:%S')] WARNING: target $SESSION is a mob- session with no resolvable parent, trying anyway" >> "$LOG"
+        echo "[$(ts)] WARNING: target $SESSION is a mob- session with no resolvable parent, trying anyway" >> "$LOG"
     fi
 fi
 
-log() { echo "[$(date '+%H:%M:%S')] $*" >> "$LOG"; echo "$*"; }
-
 log "=== Mobile attach: SESSION=$SESSION PANE=$PANE PID=$$ ==="
+log "Sessions at entry:"
+log_sessions
 
 # Validate that the target session actually exists before doing anything
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
     log "ERROR: Session '$SESSION' does not exist"
-    tmux list-sessions -F '  #{session_name}' 2>/dev/null >> "$LOG"
     echo "Session '$SESSION' no longer exists. Available sessions:"
     tmux list-sessions -F '  #{session_name}' 2>/dev/null
     exit 1
@@ -42,56 +45,68 @@ fi
 LOCK_FILE="/tmp/cc-notify-mobile-${SESSION}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-    log "Another connection to $SESSION is already establishing — exiting duplicate"
+    log "LOSER: flock held by another PID — exiting duplicate (no sessions touched)"
     exit 0
 fi
+log "WINNER: acquired lock at $(ts)"
 
 # We won the lock. Now kill any existing mob sessions for this parent.
 # Blink keeps SSH connections alive when backgrounded, so "attached" mob
 # sessions accumulate. A new deep link tap means the user wants a fresh
 # connection, so we replace the old one unconditionally.
+_killed=0
 for s in $(tmux list-sessions -F '#{session_name} #{session_group}' 2>/dev/null \
     | awk -v parent="$SESSION" '/^mob-/ && $2 == parent {print $1}'); do
-    log "Replacing existing mob session: $s"
-    tmux kill-session -t "$s" 2>/dev/null
+    log "Killing old mob session: $s"
+    tmux kill-session -t "$s" 2>/dev/null && log "  killed $s OK" || log "  kill $s FAILED"
+    (( _killed++ ))
 done
+log "Killed $_killed old mob session(s) for $SESSION"
 
 # Also clean up stale mob sessions for other parents (unattached only)
 for s in $(tmux list-sessions -F '#{session_name} #{session_attached}' 2>/dev/null \
     | awk '/^mob-/ && $2 == "0" {print $1}'); do
-    log "Cleaning stale session: $s"
+    log "Cleaning stale unattached session: $s"
     tmux kill-session -t "$s" 2>/dev/null
 done
 
+log "Sessions after cleanup:"
+log_sessions
+
 S="mob-$$"
 cleanup() {
-    log "Cleanup: killing $S"
+    log "=== Cleanup: killing $S ==="
 
     # Unzoom before killing — zoom state is window-level (shared across grouped sessions).
     # Without this, the desktop is left with a zoomed pane at mobile dimensions.
     local zoomed
     zoomed=$(tmux display-message -t "$S" -p '#{window_zoomed_flag}' 2>/dev/null || echo "0")
+    log "Cleanup: window_zoomed_flag=$zoomed"
     if [[ "$zoomed" == "1" ]]; then
-        log "Unzooming shared pane before cleanup"
-        tmux resize-pane -Z -t "$S" 2>/dev/null || true
+        log "Unzooming shared pane before kill"
+        tmux resize-pane -Z -t "$S" 2>/dev/null && log "unzoom OK" || log "unzoom FAILED/skipped"
     fi
 
-    tmux kill-session -t "$S" 2>/dev/null
+    tmux kill-session -t "$S" 2>/dev/null && log "kill-session $S OK" || log "kill-session $S FAILED/already gone"
 
     # Nudge desktop clients to recalculate window size now that the mobile
     # client (window-size latest) is gone. Without this the window can stay
     # at phone dimensions until the desktop client resizes itself.
-    tmux list-clients -t "$SESSION" -F '#{client_name}' 2>/dev/null \
-        | while read -r _client; do
-            tmux refresh-client -t "$_client" 2>/dev/null || true
-          done
+    local clients
+    clients=$(tmux list-clients -t "$SESSION" -F '#{client_name}' 2>/dev/null)
+    log "Desktop clients to refresh: ${clients:-none}"
+    echo "$clients" | while read -r _client; do
+        [[ -z "$_client" ]] && continue
+        tmux refresh-client -t "$_client" 2>/dev/null && log "refresh-client $_client OK" || log "refresh-client $_client FAILED"
+    done
+    log "=== Cleanup done ==="
 }
 trap cleanup EXIT
 
-# Pin the real session to window-size largest so mobile clients can never
-# shrink the desktop view. The mob session uses window-size latest (set below)
-# so mobile adapts to phone dimensions independently.
-tmux set -t "$SESSION" window-size largest 2>/dev/null || true
+log "Pinning $SESSION to window-size largest"
+tmux set -t "$SESSION" window-size largest 2>>"$LOG" && log "window-size largest OK" || log "window-size largest FAILED"
+_ws=$(tmux show-option -t "$SESSION" -v window-size 2>/dev/null)
+log "  verified: window-size=$_ws"
 
 log "Creating grouped session $S -> $SESSION"
 if ! tmux new-session -d -t "$SESSION" -s "$S" 2>>"$LOG"; then
@@ -105,26 +120,30 @@ if ! tmux new-session -d -t "$SESSION" -s "$S" 2>>"$LOG"; then
     tmux attach -t "$SESSION"
     exit
 fi
-log "Grouped session created OK"
+log "Grouped session $S created OK"
+log "Sessions after new-session:"
+log_sessions
 
-log "Setting window-size latest"
-tmux set -t "$S" window-size latest 2>>"$LOG" && log "window-size OK" || log "window-size FAILED"
+log "Setting $S window-size latest"
+tmux set -t "$S" window-size latest 2>>"$LOG" && log "window-size latest OK" || log "window-size latest FAILED"
+_ws=$(tmux show-option -t "$S" -v window-size 2>/dev/null)
+log "  verified: window-size=$_ws"
 
-log "Setting status off"
-tmux set -t "$S" status off 2>>"$LOG" && log "status OK" || log "status FAILED"
+log "Setting $S status off"
+tmux set -t "$S" status off 2>>"$LOG" && log "status off OK" || log "status off FAILED"
 
 if [[ -n "$PANE" ]]; then
-    log "Selecting pane $PANE"
+    log "Selecting pane $PANE on $S"
     tmux select-pane -t "$S:.$PANE" 2>>"$LOG" && log "select-pane OK" || log "select-pane FAILED"
 
-    # Zoom via client-attached hook rather than before attach.
-    # Pre-attach zoom gets cancelled when the mobile client connects and
-    # triggers a layout recalculation (window-size latest + different terminal size).
+    # Zoom via client-attached hook — pre-attach zoom is cancelled by the layout
+    # recalculation that happens when the mobile client connects.
     log "Setting client-attached hook to zoom pane $PANE"
     tmux set-hook -t "$S" client-attached \
-        "select-pane -t .$PANE ; resize-pane -Z -t .$PANE" 2>>"$LOG" \
-        && log "zoom hook OK" || log "zoom hook FAILED"
+        "run-shell 'echo \"[\\$(date +%H:%M:%S.%3N)] zoom hook fired: pane=$PANE\" >> $LOG' ; select-pane -t .$PANE ; resize-pane -Z -t .$PANE" \
+        2>>"$LOG" && log "zoom hook set OK" || log "zoom hook set FAILED"
 fi
 
-log "Attaching to $S"
+log "Attaching to $S — handoff to tmux"
 tmux attach -t "$S"
+log "tmux attach returned (session ended)"
