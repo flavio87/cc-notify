@@ -149,6 +149,15 @@ if [[ -n "$PANE" ]]; then
     # debuggable. The job runs while tmux attach blocks the main script.
     (
         sleep 0.5
+        # resize-pane -Z is a toggle. If the window is already zoomed from a
+        # previous mob session, calling -Z would unzoom instead of zoom. Always
+        # unzoom first to get to a known state, then select pane, then zoom.
+        _flag=$(tmux display-message -t "$S" -p '#{window_zoomed_flag}' 2>/dev/null || echo "0")
+        log "bg-zoom: pre-zoom flag=$_flag"
+        if [[ "$_flag" == "1" ]]; then
+            log "bg-zoom: unzooming first (toggle guard)"
+            tmux resize-pane -Z -t "$S" 2>/dev/null
+        fi
         tmux select-pane -t "$S:.$PANE" 2>/dev/null
         if tmux resize-pane -Z -t "$S:.$PANE" 2>/dev/null; then
             _flag=$(tmux display-message -t "$S" -p '#{window_zoomed_flag}' 2>/dev/null || echo "dead")
@@ -156,7 +165,6 @@ if [[ -n "$PANE" ]]; then
         else
             log "bg-zoom FAILED (session/pane gone?)"
         fi
-        # Check 1s later — did something undo the zoom?
         sleep 1
         _flag2=$(tmux display-message -t "$S" -p '#{window_zoomed_flag}' 2>/dev/null || echo "dead")
         log "bg-zoom check 1s later: flag=$_flag2"
