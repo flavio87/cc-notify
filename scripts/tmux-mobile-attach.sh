@@ -143,16 +143,25 @@ if [[ -n "$PANE" ]]; then
     log "Selecting pane $PANE on $S"
     tmux select-pane -t "$S:.$PANE" 2>>"$LOG" && log "select-pane OK" || log "select-pane FAILED"
 
-    # Zoom after a short sleep so the phone's terminal dimensions have been
-    # negotiated. client-attached fires before the SSH terminal sends its size;
-    # window-size latest then resizes the window to phone dims, which cancels
-    # any zoom set before that resize settles. 0.3s is enough for the XTERMINAL
-    # handshake to complete while remaining imperceptible to the user.
-    _zoom_cmd="sleep 0.3 && tmux select-pane -t ${S}:.${PANE} && tmux resize-pane -Z -t ${S}:.${PANE} && echo [zoom-after-sleep OK] >> ${LOG} || echo [zoom-after-sleep FAILED] >> ${LOG}"
-    log "Setting client-attached hook to zoom pane $PANE (after 0.3s resize settle)"
-    tmux set-hook -t "$S" client-attached \
-        "run-shell '$_zoom_cmd'" \
-        2>>"$LOG" && log "zoom hook set OK" || log "zoom hook set FAILED"
+    # Zoom in a background bash job after terminal resize settles.
+    # client-attached hook + run-shell has quoting issues and fires before
+    # the SSH terminal negotiates its size. A bg job is simpler and more
+    # debuggable. The job runs while tmux attach blocks the main script.
+    (
+        sleep 0.5
+        tmux select-pane -t "$S:.$PANE" 2>/dev/null
+        if tmux resize-pane -Z -t "$S:.$PANE" 2>/dev/null; then
+            _flag=$(tmux display-message -t "$S" -p '#{window_zoomed_flag}' 2>/dev/null || echo "dead")
+            log "bg-zoom fired: flag=$_flag"
+        else
+            log "bg-zoom FAILED (session/pane gone?)"
+        fi
+        # Check 1s later — did something undo the zoom?
+        sleep 1
+        _flag2=$(tmux display-message -t "$S" -p '#{window_zoomed_flag}' 2>/dev/null || echo "dead")
+        log "bg-zoom check 1s later: flag=$_flag2"
+    ) &
+    log "bg-zoom job started (PID $!), fires in 0.5s"
 fi
 
 log "Attaching to $S — handoff to tmux"
