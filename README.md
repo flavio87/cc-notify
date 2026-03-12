@@ -141,12 +141,19 @@ stateDiagram-v2
 
 ### Why grouped sessions?
 
-The mobile attach script creates a *grouped* tmux session (`mob-$$`) rather than attaching directly. This means:
+The mobile attach script creates a *grouped* tmux session (`mob-$$`) rather than attaching directly. Grouped sessions share the same windows but can have independent settings — which lets mobile get its own `window-size latest` (adapts to phone dimensions) while the real session stays on `window-size largest` (desktop always wins).
 
-- Your desktop terminal keeps its layout and dimensions untouched
-- The mobile viewport adapts to your phone's screen size independently
-- Multiple mobile connections don't interfere with each other
+**The honest caveat:** tmux fundamentally shares window dimensions across all clients viewing the same window. There is no mode where desktop and mobile have truly independent sizes — this is a tmux architectural constraint, not a bug in cc-notify. In practice:
+
+- **Desktop will briefly resize** when your phone connects (phone dimensions win until tmux enforces `largest`)
+- **`window-size largest`** means your desktop terminal always recovers to its own size — but there's a brief flicker on connection
+- **Zoom to single pane** (`PANE` argument in the deep link) is what makes mobile usable: your phone fills one pane rather than trying to display your full multi-pane layout at desktop scale
+- **On disconnect**, the script unzooms the shared pane and calls `refresh-client` on all desktop clients so the window snaps back cleanly
+
+Other benefits of grouped sessions that do hold:
+- Multiple mobile connections don't interfere with each other (each gets its own `mob-*` session)
 - Stale connections from dropped SSH sessions are cleaned up automatically
+- The `mob-*` session is fully destroyed on detach — no tmux cruft accumulates
 
 ### Requirements for deep links
 
