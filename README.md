@@ -382,7 +382,7 @@ systemd/                # Linux systemd user units
   ntm-notify-monitor.service
   ntm-dashboard.service
   ntm-serve.service
-  ft-watch.service        # Optional FrankenTerm integration
+
 launchd/                # macOS launchd agents
 desktop/                # macOS desktop integration (AppleScript, handlers)
 server/                 # Self-hosted ntfy server config (Docker)
@@ -541,7 +541,7 @@ You don't have to choose. Remote Control is great for interactive check-ins when
 
 ## Other integrations
 
-- **FrankenTerm**: File watcher integration via the `ft-watch` systemd unit. See `systemd/ft-watch.service`.
+
 - **NTM**: Multi-agent session management. The monitor script polls NTM health for state transitions. Not required for basic CC notifications.
 
 ## FAQ
