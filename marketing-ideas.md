@@ -1,9 +1,9 @@
-# cc-notify Marketing Ideas
+# tap-to-tmux Marketing Ideas
 
 ## Core message
 
 Push-based vs pull-based. Remote Control and similar tools require you to check.
-cc-notify finds you the moment something needs attention, then drops you into
+tap-to-tmux finds you the moment something needs attention, then drops you into
 the right tmux pane in one tap.
 
 The demo is everything — a 30-second recording of the full flow (Claude running
@@ -45,7 +45,7 @@ and what ranks in search long-term.
 
 **Structure:**
 1. Problem: walking away, coming back too late or too early
-2. The pull vs push distinction (Remote Control vs cc-notify)
+2. The pull vs push distinction (Remote Control vs tap-to-tmux)
 3. Architecture walkthrough — Mermaid state diagram, the Blink deep link flow
 4. Demo video embedded
 5. Install instructions (5 minutes)
@@ -86,11 +86,11 @@ Nothing lands without this. Capture it first.
 **Shot 1 — Mac screen recording (~5s)**
 Open the NTM dashboard in Safari on iPhone, mirrored to Mac. Show 3–4 session cards,
 all yellow/idle. Header: "19 sessions · 29 agents". Cut to a tmux terminal where
-Claude Code is mid-task in cc-notify-demo. You're not watching it.
+Claude Code is mid-task in tap-to-tmux-demo. You're not watching it.
 
 **Shot 2 — iPhone (camera or screen mirror) (~3s)**
 Lock screen. Notification drops in:
-  `ovh2 · cc-notify-demo`
+  `ovh2 · tap-to-tmux-demo`
   `Claude stopped and is waiting for input`
 Let it sit 1 second so viewers can read it.
 

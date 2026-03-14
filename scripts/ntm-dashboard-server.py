@@ -58,7 +58,7 @@ _PROCESS_TO_TYPE = {
 
 
 def load_config():
-    """Load cc-notify config.env values."""
+    """Load tap-to-tmux config.env values."""
     config = {
         "MACHINE": "",
         "SSH_USER": "",
@@ -68,7 +68,7 @@ def load_config():
     }
     config_path = os.path.expanduser(
         os.path.join(os.environ.get("XDG_CONFIG_HOME", "~/.config"),
-                     "cc-notify", "config.env"))
+                     "tap-to-tmux", "config.env"))
     if os.path.exists(config_path):
         with open(config_path) as f:
             for line in f:

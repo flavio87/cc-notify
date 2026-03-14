@@ -146,13 +146,32 @@ check_and_notify() {
     done
 }
 
+# Check if a session name matches any NOTIFY_EXCLUDE_SESSIONS pattern (colon-separated globs)
+session_is_excluded() {
+    local session="$1"
+    [[ -z "${NOTIFY_EXCLUDE_SESSIONS:-}" ]] && return 1
+    local _pat
+    IFS=: read -ra _excl_patterns <<< "$NOTIFY_EXCLUDE_SESSIONS"
+    for _pat in "${_excl_patterns[@]}"; do
+        [[ -z "$_pat" ]] && continue
+        # shellcheck disable=SC2254
+        case "$session" in $_pat) return 0 ;; esac
+    done
+    return 1
+}
+
 ntfy_log INFO "Starting NTM notify monitor (poll: ${POLL_SECONDS}s)"
 ntfy_log INFO "Config: MACHINE=${MACHINE}, NTFY_URL=${NTFY_URL}"
+[[ -n "${NOTIFY_EXCLUDE_SESSIONS:-}" ]] && ntfy_log INFO "Excluding sessions: ${NOTIFY_EXCLUDE_SESSIONS}"
 
 # Capture initial states without notifying
 INITIAL_CAPTURE=1
 for session in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
     [[ -d "${PROJECTS_DIR}/${session}" ]] || continue
+    if session_is_excluded "$session"; then
+        ntfy_log DEBUG "SKIP session '${session}': matches NOTIFY_EXCLUDE_SESSIONS"
+        continue
+    fi
     check_and_notify "$session"
 done
 INITIAL_CAPTURE=0
@@ -166,6 +185,10 @@ while true; do
 
     for session in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
         [[ -d "${PROJECTS_DIR}/${session}" ]] || continue
+        if session_is_excluded "$session"; then
+            ntfy_log DEBUG "SKIP session '${session}': matches NOTIFY_EXCLUDE_SESSIONS"
+            continue
+        fi
         check_and_notify "$session"
     done
 

@@ -42,7 +42,7 @@ fi
 # Blink opens two SSH connections per tap. The loser exits here immediately
 # without touching sessions — this prevents the loser's kill loop from
 # destroying the mob session the winner just created.
-LOCK_FILE="/tmp/cc-notify-mobile-${SESSION}.lock"
+LOCK_FILE="/tmp/tap-to-tmux-mobile-${SESSION}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
     log "LOSER: flock held by another PID — exiting duplicate (no sessions touched)"

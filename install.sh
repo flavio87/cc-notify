@@ -1,14 +1,14 @@
 #!/bin/bash
-# Install cc-notify: phone + desktop notifications for NTM agent sessions
+# Install tap-to-tmux: phone + desktop notifications for NTM agent sessions
 # Run: ./install.sh
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== cc-notify installer ==="
+echo "=== tap-to-tmux installer ==="
 
 # 1. Install config
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/cc-notify"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tap-to-tmux"
 mkdir -p "$CONFIG_DIR"
 if [[ ! -f "$CONFIG_DIR/config.env" ]]; then
     cp "$SCRIPT_DIR/config.env" "$CONFIG_DIR/config.env"

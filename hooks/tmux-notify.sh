@@ -49,7 +49,7 @@ fi
 # All "needs attention" events (idle, permission, stop) share ONE cooldown per project.
 # You get one notification when a session needs you, then silence until the cooldown expires.
 # The cooldown is cleared when you interact (UserPromptSubmit hook or new CC turn).
-COOLDOWN_DIR="/tmp/cc-notify-cooldown"
+COOLDOWN_DIR="/tmp/tap-to-tmux-cooldown"
 mkdir -p "$COOLDOWN_DIR"
 COOLDOWN_FILE="${COOLDOWN_DIR}/${PROJECT:-unknown}"
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# cc-notify health check — validates the entire notification pipeline
+# tap-to-tmux health check — validates the entire notification pipeline
 # Usage: ntfy-health-check.sh [--send-test]
 
 SEND_TEST=0
@@ -180,7 +180,7 @@ fi
 
 echo ""
 echo "=== Cooldown State ==="
-COOLDOWN_DIR="/tmp/cc-notify-cooldown"
+COOLDOWN_DIR="/tmp/tap-to-tmux-cooldown"
 if [[ -d "$COOLDOWN_DIR" ]]; then
     found_cooldowns=0
     for f in "$COOLDOWN_DIR"/*; do
@@ -234,7 +234,7 @@ fi
 
 echo ""
 echo "=== Log Files ==="
-LOG_DIR="/tmp/cc-notify-logs"
+LOG_DIR="/tmp/tap-to-tmux-logs"
 if [[ -d "$LOG_DIR" ]]; then
     for f in "$LOG_DIR"/*.log; do
         [[ -f "$f" ]] || continue

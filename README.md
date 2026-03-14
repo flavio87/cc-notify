@@ -1,4 +1,4 @@
-# cc-notify
+# tap-to-tmux
 
 Push notifications and one-tap deep links for AI agents running in **tmux** on a remote server.
 
@@ -21,15 +21,15 @@ Push notifications and one-tap deep links for AI agents running in **tmux** on a
 - [Project structure](#project-structure)
 - [Receiving notifications on desktop](#receiving-notifications-on-desktop)
 - [Self-hosted ntfy server](#self-hosted-ntfy-server)
-- [cc-notify vs Claude Code Remote Control](#cc-notify-vs-claude-code-remote-control)
+- [tap-to-tmux vs Claude Code Remote Control](#tap-to-tmux-vs-claude-code-remote-control)
 - [FAQ](#faq)
 - [Open tasks](#open-tasks)
 
 ## Who this is for
 
-You run Claude Code, Codex, Gemini CLI, or other AI agents inside **tmux sessions** on a VPS, cloud instance, or any machine reachable via SSH. You walk away — to make coffee, take a call, work on something else. When an agent finishes, needs permission, or hits an error, **cc-notify sends a push notification to your phone** with context about what happened. Tap the notification and [Blink Shell](https://blink.sh) opens an SSH connection straight into the exact tmux pane where the agent is waiting.
+You run Claude Code, Codex, Gemini CLI, or other AI agents inside **tmux sessions** on a VPS, cloud instance, or any machine reachable via SSH. You walk away — to make coffee, take a call, work on something else. When an agent finishes, needs permission, or hits an error, **tap-to-tmux sends a push notification to your phone** with context about what happened. Tap the notification and [Blink Shell](https://blink.sh) opens an SSH connection straight into the exact tmux pane where the agent is waiting.
 
-**tmux is required.** cc-notify discovers sessions by walking the process tree to find parent tmux panes, builds deep links that attach to specific tmux sessions, and creates independent mobile viewports via grouped tmux sessions. Without tmux, the core notification and deep link features do not work.
+**tmux is required.** tap-to-tmux discovers sessions by walking the process tree to find parent tmux panes, builds deep links that attach to specific tmux sessions, and creates independent mobile viewports via grouped tmux sessions. Without tmux, the core notification and deep link features do not work.
 
 The remote machine can be anything reachable via SSH — a cloud VPS, a dedicated server, or even your laptop on the same network or connected via [Tailscale](https://tailscale.com).
 
@@ -44,7 +44,7 @@ The remote machine can be anything reachable via SSH — a cloud VPS, a dedicate
 
 ## How it works
 
-cc-notify has two notification layers:
+tap-to-tmux has two notification layers:
 
 1. **Claude Code hook** (`tmux-notify.sh`) — Fires on CC lifecycle events (`Notification`, `Stop`). Extracts context from the session transcript (what task was running, what Claude's last response was). Sends rich notifications with project name, machine name, and context.
 
@@ -67,7 +67,7 @@ You get **one notification per project** when something needs attention, then si
 
 ## Tap-to-connect deep links
 
-The deep link system is the core UX of cc-notify. When configured, every notification includes a `blinkshell://` URL that opens [Blink Shell](https://blink.sh) on iOS, SSH's into your server, and attaches to the exact tmux session and pane where Claude is waiting — all from a single tap.
+The deep link system is the core UX of tap-to-tmux. When configured, every notification includes a `blinkshell://` URL that opens [Blink Shell](https://blink.sh) on iOS, SSH's into your server, and attaches to the exact tmux session and pane where Claude is waiting — all from a single tap.
 
 ### How the deep link flow works
 
@@ -145,7 +145,7 @@ stateDiagram-v2
 
 The mobile attach script creates a *grouped* tmux session (`mob-$$`) rather than attaching directly. Grouped sessions share the same windows but can have independent settings — which lets mobile get its own `window-size latest` (adapts to phone dimensions) while the real session stays on `window-size largest` (desktop always wins).
 
-**The honest caveat:** tmux fundamentally shares window dimensions across all clients viewing the same window. There is no mode where desktop and mobile have truly independent sizes — this is a tmux architectural constraint, not a bug in cc-notify. In practice:
+**The honest caveat:** tmux fundamentally shares window dimensions across all clients viewing the same window. There is no mode where desktop and mobile have truly independent sizes — this is a tmux architectural constraint, not a bug in tap-to-tmux. In practice:
 
 - **Desktop will briefly resize** when your phone connects (phone dimensions win until tmux enforces `largest`)
 - **`window-size largest`** means your desktop terminal always recovers to its own size — but there's a brief flicker on connection
@@ -178,7 +178,7 @@ Other benefits of grouped sessions that do hold:
 
 ### NTM dashboard
 
-If you use [ntm](https://github.com/flavio87/cc-notify) to manage multiple agent sessions, the NTM dashboard gives you a live overview of every session from your phone — with per-agent Connect buttons that tap directly into Blink:
+If you use [ntm](https://github.com/flavio87/tap-to-tmux) to manage multiple agent sessions, the NTM dashboard gives you a live overview of every session from your phone — with per-agent Connect buttons that tap directly into Blink:
 
 ![NTM dashboard on mobile](docs/images/dashboard-mobile.png)
 
@@ -186,7 +186,7 @@ Each card shows the session name, which agents are running (Claude, Codex, Gemin
 
 ## Notification delivery
 
-cc-notify's hook system extracts rich context from your agent sessions — task name, last response, project, machine, event type — and pipes it to any notification service. ntfy and Slack are built-in. Adding new destinations is straightforward because the architecture is simple: shell functions that receive structured data and `curl` it to an endpoint.
+tap-to-tmux's hook system extracts rich context from your agent sessions — task name, last response, project, machine, event type — and pipes it to any notification service. ntfy and Slack are built-in. Adding new destinations is straightforward because the architecture is simple: shell functions that receive structured data and `curl` it to an endpoint.
 
 ### Built-in destinations
 
@@ -256,13 +256,13 @@ The hook system is intentionally simple — no plugin framework, no message bus.
 ## Installation
 
 ```bash
-git clone https://github.com/flavio87/cc-notify.git
-cd cc-notify
+git clone https://github.com/flavio87/tap-to-tmux.git
+cd tap-to-tmux
 ./install.sh
 ```
 
 The installer:
-1. Copies `config.env` template to `~/.config/cc-notify/config.env`
+1. Copies `config.env` template to `~/.config/tap-to-tmux/config.env`
 2. Installs scripts to `~/.local/bin/`
 3. Installs Claude Code hooks to `~/.claude/hooks/`
 4. Installs systemd user units (optional auto-start daemons)
@@ -270,16 +270,16 @@ The installer:
 Then edit your config:
 
 ```bash
-nano ~/.config/cc-notify/config.env
+nano ~/.config/tap-to-tmux/config.env
 ```
 
 ## Configuration
 
-All settings live in `~/.config/cc-notify/config.env`:
+All settings live in `~/.config/tap-to-tmux/config.env`:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NTFY_TOPIC` | Yes | Unique topic name for your notification channel. Generate one: `python3 -c "import secrets; print(f'cc-notify-{secrets.token_hex(8)}')"` |
+| `NTFY_TOPIC` | Yes | Unique topic name for your notification channel. Generate one: `python3 -c "import secrets; print(f'tap-to-tmux-{secrets.token_hex(8)}')"` |
 | `MACHINE` | No | Display name in notification titles. Defaults to hostname. |
 | `SSH_USER` | No | Username for deep link SSH commands. Defaults to current user. |
 | `SSH_HOST` | No | Hostname/IP for deep link SSH commands. Defaults to hostname. |
@@ -288,6 +288,7 @@ All settings live in `~/.config/cc-notify/config.env`:
 | `SLACK_WEBHOOK_URL` | No | Slack incoming webhook URL for dual delivery. Leave empty to disable. |
 | `PROJECTS_DIR` | No | Directory containing your project repos. Defaults to `$HOME/projects`. Used by the NTM monitor for session matching. |
 | `NOTIFY_EXCLUDE_DIRS` | No | Colon-separated path prefixes that will never trigger notifications. Example: `/data/notes:/home/user/scratch`. Useful for personal notes or low-signal dirs. |
+| `NOTIFY_EXCLUDE_SESSIONS` | No | Colon-separated glob patterns matched against tmux session names. Matching sessions are skipped by the NTM monitor. Example: `autonomous-*:batch-*:tmp-*`. Useful for noisy automated sessions. |
 
 ## Claude Code hooks setup
 
@@ -347,10 +348,10 @@ ntfy-health-check.sh --send-test  # also send a test notification
 **No notifications received:**
 1. Run `ntfy-health-check.sh --send-test` — does the test notification arrive?
 2. Check `NTFY_TOPIC` in your config matches the topic you subscribed to in the ntfy app
-3. Check logs: `cat /tmp/cc-notify-logs/tmux-notify.log`
+3. Check logs: `cat /tmp/tap-to-tmux-logs/tmux-notify.log`
 
 **Duplicate notifications:**
-- The cooldown system should prevent these. Check: `ls -la /tmp/cc-notify-cooldown/`
+- The cooldown system should prevent these. Check: `ls -la /tmp/tap-to-tmux-cooldown/`
 - Default cooldown is 24h. Override with `NTFY_COOLDOWN_SECONDS` in config.
 
 **Deep links not working:**
@@ -360,7 +361,7 @@ ntfy-health-check.sh --send-test  # also send a test notification
 **NTM monitor not detecting agents:**
 - Verify NTM is installed: `ntm --version`
 - Check if sessions are visible: `ntm health --json`
-- Logs: `cat /tmp/cc-notify-logs/ntm-notify-monitor.log`
+- Logs: `cat /tmp/tap-to-tmux-logs/ntm-notify-monitor.log`
 
 ## Project structure
 
@@ -448,17 +449,17 @@ The [official ntfy app](https://apps.apple.com/us/app/ntfy/id1625396347) is on t
 
 Set `SLACK_WEBHOOK_URL` in your config and every notification also posts to a Slack channel. The Slack desktop app delivers these as native OS notifications with sound on any platform. No extra setup beyond the webhook — and it means your agents can page both your phone (ntfy) and your desktop (Slack) at the same time.
 
-## cc-notify vs Claude Code Remote Control
+## tap-to-tmux vs Claude Code Remote Control
 
 Claude Code now has a built-in [Remote Control](https://docs.anthropic.com/en/docs/claude-code/remote-control) feature — connect to running sessions from your phone via `claude.ai/code` or the Claude iOS app, scan a QR code, auto-reconnect after sleep. These two tools solve overlapping problems in different ways, and they can work together.
 
-The key context: **Remote Control doesn't require tmux** — it works with any Claude Code session. **cc-notify requires tmux** — but in exchange gives you push notifications, deep links, multi-agent support, and a full terminal experience. If you already run your agents in tmux (which most VPS-based workflows do), cc-notify adds a layer that Remote Control can't.
+The key context: **Remote Control doesn't require tmux** — it works with any Claude Code session. **tap-to-tmux requires tmux** — but in exchange gives you push notifications, deep links, multi-agent support, and a full terminal experience. If you already run your agents in tmux (which most VPS-based workflows do), tap-to-tmux adds a layer that Remote Control can't.
 
 ### Two different philosophies
 
 **Remote Control** gives you a web-based window into a single Claude Code session. You open the app, find the session, see what's happening, type a response. It's a remote viewer for Claude Code. It doesn't require any particular terminal setup.
 
-**cc-notify + Blink Shell** is built for tmux-based workflows. You run your agents in tmux sessions on a remote machine. cc-notify watches those sessions, pushes notifications when something needs attention, and gives you one-tap deep links that land you in the right tmux pane via Blink Shell — with your full terminal environment, layout, and tools.
+**tap-to-tmux + Blink Shell** is built for tmux-based workflows. You run your agents in tmux sessions on a remote machine. tap-to-tmux watches those sessions, pushes notifications when something needs attention, and gives you one-tap deep links that land you in the right tmux pane via Blink Shell — with your full terminal environment, layout, and tools.
 
 ### Comparison across five dimensions
 
@@ -466,7 +467,7 @@ The key context: **Remote Control doesn't require tmux** — it works with any C
 
 This is the fundamental difference.
 
-| | Remote Control | cc-notify + Blink |
+| | Remote Control | tap-to-tmux + Blink |
 |---|---|---|
 | **Permission prompt** | You don't know until you open the app and check | Push notification hits your lock screen instantly |
 | **Task finished** | You don't know until you check | Push notification with context about what finished |
@@ -475,22 +476,22 @@ This is the fundamental difference.
 
 Remote Control has **no push notifications** as of today — this is an [open feature request](https://github.com/anthropics/claude-code/issues/29438). You must actively poll the web UI. If you walk away from your phone, you have no idea when Claude needs you.
 
-cc-notify is built around the opposite model: you walk away, and **it finds you** when something needs attention.
+tap-to-tmux is built around the opposite model: you walk away, and **it finds you** when something needs attention.
 
 #### 2. Getting there — how do you connect?
 
-| | Remote Control | cc-notify + Blink |
+| | Remote Control | tap-to-tmux + Blink |
 |---|---|---|
-| **Initial setup** | `/remote-control` in session, scan QR | Install cc-notify, configure ntfy + Blink key |
+| **Initial setup** | `/remote-control` in session, scan QR | Install tap-to-tmux, configure ntfy + Blink key |
 | **Reconnecting** | Open Claude app → find session | Tap notification → Blink opens → SSH → tmux pane (one tap) |
 | **What you land in** | Web-based terminal in a browser/app | Native terminal (Blink Shell) attached to your tmux session |
 | **Pane targeting** | Lands in the session (no pane control) | Deep link targets the exact pane where Claude is waiting, zoomed |
 
-The deep link flow in cc-notify means you go from lock screen to the right tmux pane in a single tap. Blink Shell handles the SSH connection, `tmux-mobile-attach.sh` creates an independent mobile viewport, selects the pane, and zooms it. No manual SSH, no finding the session, no navigating panes.
+The deep link flow in tap-to-tmux means you go from lock screen to the right tmux pane in a single tap. Blink Shell handles the SSH connection, `tmux-mobile-attach.sh` creates an independent mobile viewport, selects the pane, and zooms it. No manual SSH, no finding the session, no navigating panes.
 
 #### 3. The experience once connected
 
-| | Remote Control | cc-notify + Blink |
+| | Remote Control | tap-to-tmux + Blink |
 |---|---|---|
 | **Interface** | Web UI (responsive, but browser-based) | Full native terminal via Blink Shell |
 | **Send prompts** | Yes, via web editor | Yes, via Blink terminal (full keyboard, shell access) |
@@ -503,18 +504,18 @@ Both let you see what Claude is doing and send prompts. The difference is depth:
 
 #### 4. Scale — multiple agents and projects
 
-| | Remote Control | cc-notify + Blink |
+| | Remote Control | tap-to-tmux + Blink |
 |---|---|---|
 | **Multiple CC sessions** | Switch between sessions in web UI | One notification per session, each with its own deep link |
 | **Dashboard / overview** | Session list in web UI | NTM dashboard shows all agents with status, health, uptime |
 | **Non-CC agents** (Codex, Gemini CLI, etc.) | Not supported | Fully supported via NTM polling |
 | **Per-project deduplication** | N/A | One notification per project, cooldown until you interact |
 
-This is where the gap is widest. If you run multiple agents across projects — especially mixed agent types — Remote Control has no way to aggregate or notify. cc-notify with NTM gives you a single dashboard plus targeted notifications.
+This is where the gap is widest. If you run multiple agents across projects — especially mixed agent types — Remote Control has no way to aggregate or notify. tap-to-tmux with NTM gives you a single dashboard plus targeted notifications.
 
 #### 5. Infrastructure and privacy
 
-| | Remote Control | cc-notify + Blink |
+| | Remote Control | tap-to-tmux + Blink |
 |---|---|---|
 | **Traffic routing** | Session data through Anthropic's servers | Direct SSH to your VPS (nothing leaves your infra) |
 | **Self-hosted option** | No | Yes — self-hosted ntfy server |
@@ -527,16 +528,16 @@ This is where the gap is widest. If you run multiple agents across projects — 
 | Scenario | Best tool | Why |
 |----------|-----------|-----|
 | Quick check on a single CC session from your couch | **Remote Control** | Simplest path — QR code, zero config |
-| Walk away for hours, come back only when needed | **cc-notify** | Push notifications mean you don't waste time polling |
-| Running 3+ CC agents across different projects | **cc-notify + NTM** | Per-project notifications + dashboard overview |
-| Mixed agents (CC + Codex + Gemini CLI) | **cc-notify + NTM** | Only option — Remote Control is CC-only |
-| tmux power user (custom layouts, splits, persistent sessions) | **cc-notify + Blink** | You stay in your real terminal environment |
-| Need to check logs, run tests, or use other tools from mobile | **cc-notify + Blink** | Full shell access, not just a CC session view |
-| Both — interactive when active, async when away | **Both together** | Remote Control for in-the-moment work, cc-notify for "tap me when it's time" |
+| Walk away for hours, come back only when needed | **tap-to-tmux** | Push notifications mean you don't waste time polling |
+| Running 3+ CC agents across different projects | **tap-to-tmux + NTM** | Per-project notifications + dashboard overview |
+| Mixed agents (CC + Codex + Gemini CLI) | **tap-to-tmux + NTM** | Only option — Remote Control is CC-only |
+| tmux power user (custom layouts, splits, persistent sessions) | **tap-to-tmux + Blink** | You stay in your real terminal environment |
+| Need to check logs, run tests, or use other tools from mobile | **tap-to-tmux + Blink** | Full shell access, not just a CC session view |
+| Both — interactive when active, async when away | **Both together** | Remote Control for in-the-moment work, tap-to-tmux for "tap me when it's time" |
 
 ### They're complementary
 
-You don't have to choose. Remote Control is great for interactive check-ins when you're actively working from your phone. cc-notify is great for the other 90% of the time — when you've walked away and need to know the moment something needs attention, then get back to the right place in one tap.
+You don't have to choose. Remote Control is great for interactive check-ins when you're actively working from your phone. tap-to-tmux is great for the other 90% of the time — when you've walked away and need to know the moment something needs attention, then get back to the right place in one tap.
 
 ## Other integrations
 
@@ -571,7 +572,7 @@ The mobile viewport (`mob-*` grouped session) is cleaned up automatically. Your 
 
 ### How is this different from just using `notify-send` or `osascript` in a hook?
 
-Those are local desktop notifications — they only work if you're sitting at the machine. cc-notify sends push notifications to your phone via ntfy, adds Blink Shell deep links for one-tap reconnection, handles per-project deduplication with cooldowns, extracts rich context from the agent's transcript, and optionally pipes to Slack, Discord, or any other service. It's the difference between "beep on my desktop" and "page me on my phone with context and a connect button."
+Those are local desktop notifications — they only work if you're sitting at the machine. tap-to-tmux sends push notifications to your phone via ntfy, adds Blink Shell deep links for one-tap reconnection, handles per-project deduplication with cooldowns, extracts rich context from the agent's transcript, and optionally pipes to Slack, Discord, or any other service. It's the difference between "beep on my desktop" and "page me on my phone with context and a connect button."
 
 ### I only run one Claude Code session. Is this overkill?
 

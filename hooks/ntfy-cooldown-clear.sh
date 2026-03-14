@@ -9,10 +9,10 @@ if [[ -n "$CWD" ]]; then
     PROJECT=$(basename "$CWD")
 fi
 
-COOLDOWN_FILE="/tmp/cc-notify-cooldown/${PROJECT:-unknown}"
+COOLDOWN_FILE="/tmp/tap-to-tmux-cooldown/${PROJECT:-unknown}"
 if [[ -f "$COOLDOWN_FILE" ]]; then
     rm -f "$COOLDOWN_FILE"
-    mkdir -p /tmp/cc-notify-logs
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Cooldown cleared for ${PROJECT}" >> /tmp/cc-notify-logs/cooldown-clear.log
+    mkdir -p /tmp/tap-to-tmux-logs
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Cooldown cleared for ${PROJECT}" >> /tmp/tap-to-tmux-logs/cooldown-clear.log
 fi
 exit 0

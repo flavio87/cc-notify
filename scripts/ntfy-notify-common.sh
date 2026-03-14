@@ -1,9 +1,9 @@
 #!/bin/bash
-# cc-notify shared library — sourced by all notification scripts
+# tap-to-tmux shared library — sourced by all notification scripts
 # Provides: config loading, deep link building, notification sending, context extraction
 
 # Load config (safe defaults, overridden by config.env)
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/cc-notify"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tap-to-tmux"
 [[ -f "$CONFIG_DIR/config.env" ]] && source "$CONFIG_DIR/config.env"
 
 # Validate required config
@@ -21,12 +21,12 @@ SSH_USER="${SSH_USER:-$(whoami)}"
 SSH_HOST="${SSH_HOST:-$(hostname)}"
 BLINK_KEY="${BLINK_KEY:-}"
 PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
-STATE_DIR="${STATE_DIR:-/tmp/cc-notify-state}"
+STATE_DIR="${STATE_DIR:-/tmp/tap-to-tmux-state}"
 
 mkdir -p "$STATE_DIR"
 
 # --- Logging infrastructure ---
-LOG_DIR="/tmp/cc-notify-logs"
+LOG_DIR="/tmp/tap-to-tmux-logs"
 mkdir -p "$LOG_DIR"
 
 # Auto-derive log file from calling script name
