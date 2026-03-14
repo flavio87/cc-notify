@@ -9,7 +9,7 @@ Restart=on-failure
 RestartSec=5
 Environment=HOME=%h
 Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
-Environment=FT_WORKSPACE=%h/cc-notify
+Environment=FT_WORKSPACE=%h/tap-to-tmux
 
 [Install]
 WantedBy=default.target
