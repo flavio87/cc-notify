@@ -50,11 +50,44 @@ _ACTIVE_TICK_THRESHOLD = 30
 # so we use the actual tmux process as source of truth.
 _PROCESS_TO_TYPE = {
     "claude": "cc",
-    "bun": "cod",       # Codex runs via bun
-    "node": "cod",       # Codex alternate
+    "bun": "cod",       # Codex runs via bun — but check child for claude-code
+    "node": "cod",       # Codex alternate — but check child for claude-code
     "gemini": "gmi",
     "aider": "aider",
 }
+
+
+def _resolve_type(cmd, pane_pid=None):
+    """Resolve agent type, checking child process cmdline for bun/node.
+
+    bun and node host both Codex and Claude Code CLI. Read /proc/<child>/cmdline
+    to distinguish them instead of assuming bun == codex.
+    """
+    if cmd not in _PROCESS_TO_TYPE:
+        return ""
+    if cmd not in ("bun", "node") or pane_pid is None:
+        return _PROCESS_TO_TYPE[cmd]
+    try:
+        children = subprocess.run(
+            ["pgrep", "-P", str(pane_pid)],
+            capture_output=True, text=True, timeout=3
+        )
+        for child_pid in children.stdout.strip().split("\n"):
+            child_pid = child_pid.strip()
+            if not child_pid:
+                continue
+            try:
+                with open(f"/proc/{child_pid}/cmdline") as f:
+                    cmdline = f.read().replace("\x00", " ").lower()
+                if "claude" in cmdline:
+                    return "cc"
+                if "codex" in cmdline:
+                    return "cod"
+            except (FileNotFoundError, PermissionError):
+                pass
+    except Exception:
+        pass
+    return _PROCESS_TO_TYPE[cmd]  # fallback to cod
 
 
 def load_config():
@@ -262,19 +295,19 @@ def build_status():
         "sessions": [],
     }
 
-    # Get tmux pane commands for type mapping
+    # Get tmux pane commands + PIDs for type mapping
     try:
         all_panes_result = subprocess.run(
             ["tmux", "list-panes", "-a",
-             "-F", "#{session_name} #{pane_index} #{pane_current_command}"],
+             "-F", "#{session_name} #{pane_index} #{pane_pid} #{pane_current_command}"],
             capture_output=True, text=True, timeout=5
         )
-        pane_commands = {}  # 'session:pane' -> command
+        pane_commands = {}  # 'session:pane' -> (command, pid)
         if all_panes_result.returncode == 0:
             for line in all_panes_result.stdout.strip().split("\n"):
                 parts = line.split()
-                if len(parts) >= 3:
-                    pane_commands[f"{parts[0]}:{parts[1]}"] = parts[2]
+                if len(parts) >= 4:
+                    pane_commands[f"{parts[0]}:{parts[1]}"] = (parts[3], int(parts[2]))
     except Exception:
         pane_commands = {}
 
@@ -297,11 +330,11 @@ def build_status():
         agents = []
 
         # Build agents from tmux pane info + CPU activity cache
-        for key, cmd in pane_commands.items():
+        for key, (cmd, pane_pid) in pane_commands.items():
             if not key.startswith(f"{name}:"):
                 continue
             pane_idx = int(key.split(":")[1])
-            real_type = _PROCESS_TO_TYPE.get(cmd, "")
+            real_type = _resolve_type(cmd, pane_pid)
             if not real_type:
                 continue
 
