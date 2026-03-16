@@ -5,7 +5,8 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== tap-to-tmux installer ==="
+VERSION=$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown")
+echo "=== tap-to-tmux installer (v$VERSION) ==="
 
 # 1. Install config
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tap-to-tmux"
@@ -98,4 +99,4 @@ echo "3. Subscribe in ntfy app to your topic on your server"
 echo "4. Run health check: ntfy-health-check.sh --send-test"
 echo "5. Dashboard: http://<hostname>:7338/"
 echo ""
-echo "Done!"
+echo "Done! (tap-to-tmux v$VERSION)"
