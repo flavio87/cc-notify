@@ -44,7 +44,12 @@ _PROJECTS_DIR = os.environ.get("PROJECTS_DIR", os.path.expanduser("~/projects"))
 # Truly active agents (mid-turn) use 100+ ticks/3s.
 # Idle Codex (bun) uses 0 ticks/3s.
 # Threshold of 30 cleanly separates idle-loop from real work.
-_ACTIVE_TICK_THRESHOLD = 30
+try:
+    _ACTIVE_TICK_THRESHOLD = int(
+        os.environ.get("DASHBOARD_ACTIVE_TICK_THRESHOLD", "30")
+    )
+except ValueError:
+    _ACTIVE_TICK_THRESHOLD = 30
 
 # --- Security: bearer token auth (optional) ---
 # Set DASHBOARD_TOKEN to require Authorization: Bearer <token> on API endpoints.
@@ -123,6 +128,7 @@ def load_config():
         "SSH_HOST": "",
         "BLINK_KEY": "",
         "PROJECTS_DIR": "",
+        "SSH_REMOTE_HOME": "",
     }
     config_path = os.path.expanduser(
         os.path.join(os.environ.get("XDG_CONFIG_HOME", "~/.config"),
@@ -148,6 +154,9 @@ def load_config():
         config["SSH_HOST"] = os.uname().nodename
     if not config["PROJECTS_DIR"]:
         config["PROJECTS_DIR"] = _PROJECTS_DIR
+    if not config["SSH_REMOTE_HOME"]:
+        # Remote home path for deep links; matches ntfy-notify-common.sh default.
+        config["SSH_REMOTE_HOME"] = f"/home/{config['SSH_USER']}"
     return config
 
 
@@ -372,7 +381,7 @@ def build_status():
             # Per-agent blink deep link with pane zoom
             agent_ssh_cmd = (
                 f"ssh -t {config['SSH_USER']}@{config['SSH_HOST']} "
-                f"/home/{config['SSH_USER']}/.local/bin/"
+                f"{config['SSH_REMOTE_HOME']}/.local/bin/"
                 f"tmux-mobile-attach.sh {name} {pane_idx}"
             )
             agent_blink_url = (
@@ -406,7 +415,7 @@ def build_status():
         # Session overview blink link (no pane zoom)
         ssh_cmd = (
             f"ssh -t {config['SSH_USER']}@{config['SSH_HOST']} "
-            f"/home/{config['SSH_USER']}/.local/bin/tmux-mobile-attach.sh {name}"
+            f"{config['SSH_REMOTE_HOME']}/.local/bin/tmux-mobile-attach.sh {name}"
         )
         blink_url = (
             f"blinkshell://run?key={config['BLINK_KEY']}"

@@ -482,8 +482,9 @@ async function doSpawn() {
     // On mobile, offer to connect immediately via Blink
     if (IS_MOBILE) {
       const cfg = await fetch('/api/config').then(r => r.json());
+      const remoteHome = cfg.SSH_REMOTE_HOME || `/home/${cfg.SSH_USER}`;
       const sshCmd = `ssh -t ${cfg.SSH_USER}@${cfg.SSH_HOST} `
-        + `/home/${cfg.SSH_USER}/.local/bin/tmux-mobile-attach.sh ${name}`;
+        + `${remoteHome}/.local/bin/tmux-mobile-attach.sh ${name}`;
       const blinkUrl = `blinkshell://run?key=${cfg.BLINK_KEY}`
         + `&cmd=${encodeURIComponent(sshCmd)}`;
       window.location.href = blinkUrl;
