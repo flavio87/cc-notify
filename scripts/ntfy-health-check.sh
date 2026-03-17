@@ -30,7 +30,7 @@ done
 
 echo ""
 echo "=== Configuration ==="
-echo "  NTFY_URL=${NTFY_URL}"
+echo "  NTFY_URL=${NTFY_SERVER}/*** (topic redacted)"
 echo "  MACHINE=${MACHINE}"
 if [[ -f "${CONFIG_DIR}/config.env" ]]; then
     ok "config.env found at ${CONFIG_DIR}/config.env"
@@ -180,7 +180,7 @@ fi
 
 echo ""
 echo "=== Cooldown State ==="
-COOLDOWN_DIR="/tmp/tap-to-tmux-cooldown"
+COOLDOWN_DIR="${XDG_RUNTIME_DIR:-/tmp}/tap-to-tmux-cooldown"
 if [[ -d "$COOLDOWN_DIR" ]]; then
     found_cooldowns=0
     for f in "$COOLDOWN_DIR"/*; do

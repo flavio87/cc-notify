@@ -3,5 +3,8 @@
 base-url: https://ntfy.example.com
 upstream-base-url: https://ntfy.sh
 cache-file: /var/cache/ntfy/cache.db
-auth-default-access: read-write
+# SECURITY: deny by default, then grant per-topic access:
+#   ntfy user add --role=admin ADMIN_USER
+#   ntfy access ADMIN_USER YOUR_TOPIC rw
+auth-default-access: deny
 behind-proxy: true

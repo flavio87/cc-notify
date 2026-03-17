@@ -258,6 +258,22 @@ const AGENT_NAMES = { cc: 'Claude', cod: 'Codex', gmi: 'Gemini' };
 const REFRESH_MS = 10000;
 let lastUpdate = null;
 
+// HTML-escape to prevent XSS from untrusted data (session names, etc.)
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+// Validate URL protocol before using in href attributes
+function safeHref(url) {
+  if (!url) return '#';
+  try {
+    const p = new URL(url).protocol;
+    if (/^(blinkshell|ntm-connect|https?):$/.test(p)) return esc(url);
+  } catch {}
+  return '#';
+}
+
 // Detect mobile: touch device with narrow screen (iPhone/iPad in portrait)
 const IS_MOBILE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   || (navigator.maxTouchPoints > 0 && window.innerWidth < 800);
@@ -344,15 +360,15 @@ function renderStatus(data) {
 
       // Mobile: Blink deep link to specific pane. Desktop: no per-agent link needed.
       const connectBtn = IS_MOBILE
-        ? `<a class="connect-btn" href="${a.blink_url}">Connect</a>`
+        ? `<a class="connect-btn" href="${safeHref(a.blink_url)}">Connect</a>`
         : '';
 
       return `
         <div class="agent-row">
-          <div class="indicator ${a.activity}" style="width:10px;height:10px;"></div>
+          <div class="indicator ${esc(a.activity)}" style="width:10px;height:10px;"></div>
           <div class="agent-info">
-            <div class="agent-type ${a.activity}">${label}</div>
-            <div class="agent-time">${timeStr}${a.rate_limited ? ' \u00b7 rate limited' : ''}</div>
+            <div class="agent-type ${esc(a.activity)}">${esc(label)}</div>
+            <div class="agent-time">${esc(timeStr)}${a.rate_limited ? ' \u00b7 rate limited' : ''}</div>
           </div>
           ${connectBtn}
         </div>`;
@@ -364,15 +380,15 @@ function renderStatus(data) {
 
     // Mobile: Blink overview link. Desktop: ntm-connect:// to activate WezTerm tab.
     const sessionLink = IS_MOBILE
-      ? `<a class="connect-btn overview" href="${s.blink_url}">Overview</a>`
-      : `<a class="connect-btn overview" href="${s.desktop_url}">Open in WezTerm</a>`;
+      ? `<a class="connect-btn overview" href="${safeHref(s.blink_url)}">Overview</a>`
+      : `<a class="connect-btn overview" href="${safeHref(s.desktop_url)}">Open in WezTerm</a>`;
 
     return `
       <div class="card">
         <div class="card-header">
-          <div class="indicator ${state}"></div>
-          <span class="session-name">${s.name}</span>
-          <span class="state-label ${state}">${stateDisplay}</span>
+          <div class="indicator ${esc(state)}"></div>
+          <span class="session-name">${esc(s.name)}</span>
+          <span class="state-label ${esc(state)}">${esc(stateDisplay)}</span>
         </div>
         ${agentRows}${noAgents}
         ${sessionLink}

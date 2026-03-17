@@ -14,6 +14,7 @@ Endpoints:
   POST /api/spawn     Create new session (name required, spawns cc=1)
 """
 
+import collections
 import http.server
 import json
 import os
@@ -33,7 +34,7 @@ DASHBOARD_HTML = next((p for p in _SEARCH_PATHS if os.path.exists(p)),
                       _SEARCH_PATHS[1])
 
 PORT = int(os.environ.get("DASHBOARD_PORT", "7338"))
-HOST = os.environ.get("DASHBOARD_HOST", "0.0.0.0")
+HOST = os.environ.get("DASHBOARD_HOST", "127.0.0.1")
 
 _VALID_SESSION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _PROJECTS_DIR = os.environ.get("PROJECTS_DIR", os.path.expanduser("~/projects"))
@@ -44,6 +45,30 @@ _PROJECTS_DIR = os.environ.get("PROJECTS_DIR", os.path.expanduser("~/projects"))
 # Idle Codex (bun) uses 0 ticks/3s.
 # Threshold of 30 cleanly separates idle-loop from real work.
 _ACTIVE_TICK_THRESHOLD = 30
+
+# --- Security: bearer token auth (optional) ---
+# Set DASHBOARD_TOKEN to require Authorization: Bearer <token> on API endpoints.
+# When empty, API is open (backward compatible for localhost-only setups).
+_AUTH_TOKEN = os.environ.get("DASHBOARD_TOKEN", "")
+
+# --- Rate limiting ---
+# Simple per-IP rate limiter: max requests per window.
+_RATE_LIMIT_MAX = int(os.environ.get("DASHBOARD_RATE_LIMIT", "120"))
+_RATE_LIMIT_WINDOW = 60  # seconds
+_rate_lock = threading.Lock()
+_rate_counters = collections.defaultdict(list)  # ip -> [timestamps]
+
+
+def _rate_limit_check(ip):
+    """Return True if the request should be allowed."""
+    now = time.time()
+    cutoff = now - _RATE_LIMIT_WINDOW
+    with _rate_lock:
+        _rate_counters[ip] = [t for t in _rate_counters[ip] if t > cutoff]
+        if len(_rate_counters[ip]) >= _RATE_LIMIT_MAX:
+            return False
+        _rate_counters[ip].append(now)
+        return True
 
 # Map tmux pane_current_command to agent type codes.
 # ntm's agent_type heuristic is unreliable (e.g., reports claude as cod),
@@ -413,25 +438,89 @@ class DashboardServer(http.server.ThreadingHTTPServer):
 class DashboardHandler(http.server.BaseHTTPRequestHandler):
     timeout = 10  # seconds per request (prevents hung connections from blocking threads)
 
+    def _check_rate_limit(self):
+        """Return True if request is within rate limit."""
+        ip = self.client_address[0]
+        if not _rate_limit_check(ip):
+            self.send_error(429, "Too Many Requests")
+            return False
+        return True
+
+    def _check_auth(self):
+        """Return True if request is authenticated (or no token configured)."""
+        if not _AUTH_TOKEN:
+            return True
+        auth = self.headers.get("Authorization", "")
+        if auth == f"Bearer {_AUTH_TOKEN}":
+            return True
+        self.send_error(401, "Unauthorized")
+        return False
+
+    def _allowed_origin(self):
+        """Return the allowed CORS origin (same-host only, not wildcard)."""
+        origin = self.headers.get("Origin", "")
+        if not origin:
+            return None
+        # Allow same-host origins (any port) for dashboard access
+        try:
+            parsed = urllib.parse.urlparse(origin)
+            server_host = self.headers.get("Host", "").split(":")[0]
+            if parsed.hostname in ("127.0.0.1", "localhost", server_host):
+                return origin
+        except Exception:
+            pass
+        return None
+
+    def _check_origin_for_mutation(self):
+        """For state-changing requests, reject cross-origin unless from same host."""
+        origin = self.headers.get("Origin", "")
+        if not origin:
+            return True  # non-browser clients (curl, etc.) don't send Origin
+        if self._allowed_origin():
+            return True
+        self.send_error(403, "Cross-origin request blocked")
+        return False
+
+    def _add_cors_headers(self):
+        """Add CORS headers scoped to same-host origins."""
+        allowed = self._allowed_origin()
+        if allowed:
+            self.send_header("Access-Control-Allow-Origin", allowed)
+            self.send_header("Vary", "Origin")
+
     def do_GET(self):
+        if not self._check_rate_limit():
+            return
         if self.path == "/" or self.path == "/status.html":
             self.serve_html()
         elif self.path == "/api/status":
+            if not self._check_auth():
+                return
             self.serve_status()
         elif self.path == "/api/config":
+            if not self._check_auth():
+                return
             self.serve_config()
         else:
             self.send_error(404)
 
     def do_OPTIONS(self):
         """Handle CORS preflight for POST requests."""
+        if not self._check_rate_limit():
+            return
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._add_cors_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def do_POST(self):
+        if not self._check_rate_limit():
+            return
+        if not self._check_auth():
+            return
+        if not self._check_origin_for_mutation():
+            return
         if self.path == "/api/spawn":
             self.serve_spawn()
         else:
@@ -504,7 +593,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body_bytes)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._add_cors_headers()
         self.end_headers()
         self.wfile.write(body_bytes)
 
@@ -515,7 +604,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._add_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -537,7 +626,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._add_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -547,7 +636,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._add_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 

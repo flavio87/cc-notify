@@ -21,12 +21,18 @@ SSH_USER="${SSH_USER:-$(whoami)}"
 SSH_HOST="${SSH_HOST:-$(hostname)}"
 BLINK_KEY="${BLINK_KEY:-}"
 PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
-STATE_DIR="${STATE_DIR:-/tmp/tap-to-tmux-state}"
+
+# Use XDG_RUNTIME_DIR (per-user, mode 0700) when available, fall back to /tmp.
+_RUNTIME_BASE="${XDG_RUNTIME_DIR:-/tmp}"
+STATE_DIR="${STATE_DIR:-${_RUNTIME_BASE}/tap-to-tmux-state}"
+
+# Restrict new files/dirs to owner-only (prevents information leaks on multi-user systems)
+umask 0077
 
 mkdir -p "$STATE_DIR"
 
 # --- Logging infrastructure ---
-LOG_DIR="/tmp/tap-to-tmux-logs"
+LOG_DIR="${_RUNTIME_BASE}/tap-to-tmux-logs"
 mkdir -p "$LOG_DIR"
 
 # Auto-derive log file from calling script name
@@ -107,8 +113,9 @@ extract_pane_context() {
     raw_capture=$(tmux capture-pane -t "$pane_id" -p -S -60 2>/dev/null)
     [[ -z "$raw_capture" ]] && return
 
-    eval "$(echo "$raw_capture" | python3 -c "
-import sys, shlex
+    local _ctx_json
+    _ctx_json=$(echo "$raw_capture" | python3 -c "
+import sys, json
 lines = sys.stdin.read().split('\n')
 noise = set('─│╭╰╮╯')
 skip_kw = ['? for shortcuts','context left','background terminal','Tip:','model:','directory:']
@@ -131,9 +138,12 @@ if prompt_idx >= 0:
         if len(ctx_lines) >= 6: break
 
 ctx = chr(10).join(ctx_lines)
-print(f'task_line={shlex.quote(task)}')
-print(f'response_lines={shlex.quote(ctx)}')
-" 2>/dev/null)"
+print(json.dumps({'task': task, 'ctx': ctx}))
+" 2>/dev/null)
+    if [[ -n "$_ctx_json" ]]; then
+        task_line=$(echo "$_ctx_json" | jq -r '.task')
+        response_lines=$(echo "$_ctx_json" | jq -r '.ctx')
+    fi
 }
 
 # Extract task and context using ntm --robot-tail (structured JSON output)
@@ -154,8 +164,9 @@ extract_pane_context_robot() {
 
     if [[ -n "$robot_json" ]] && echo "$robot_json" | jq -e '.success == true' &>/dev/null; then
         # Parse structured robot-tail output
-        eval "$(echo "$robot_json" | python3 -c "
-import sys, json, shlex
+        local _robot_ctx
+        _robot_ctx=$(echo "$robot_json" | python3 -c "
+import sys, json
 
 data = json.load(sys.stdin)
 panes = data.get('panes', {})
@@ -199,9 +210,12 @@ if pane_data:
             if len(ctx_lines) >= 6: break
 
 ctx = chr(10).join(ctx_lines)
-print(f'task_line={shlex.quote(task)}')
-print(f'response_lines={shlex.quote(ctx)}')
-" 2>/dev/null)"
+print(json.dumps({'task': task, 'ctx': ctx}))
+" 2>/dev/null)
+        if [[ -n "$_robot_ctx" ]]; then
+            task_line=$(echo "$_robot_ctx" | jq -r '.task')
+            response_lines=$(echo "$_robot_ctx" | jq -r '.ctx')
+        fi
         [[ -n "$task_line" || -n "$response_lines" ]] && return
     fi
 
