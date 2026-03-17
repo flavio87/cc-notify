@@ -88,10 +88,10 @@ if [[ "$PANE_LIST" == "[]" ]]; then
     exit 1
 fi
 
-MATCH=$(echo "$PANE_LIST" | python3 -c "
-import sys, json
+MATCH=$(SESSION_NAME="$SESSION" python3 -c "
+import sys, json, os
 data = json.load(sys.stdin)
-session = '$SESSION'
+session = os.environ['SESSION_NAME']
 for pane in data:
     title = pane.get('title', '')
     if session in title:
@@ -108,11 +108,11 @@ for pane in data:
         print(json.dumps({'pane_id': pane['pane_id'], 'tab_id': pane['tab_id'], 'match': 'workspace', 'ws': ws}))
         sys.exit(0)
 print('{}')
-" 2>/dev/null)
+" <<< "$PANE_LIST" 2>/dev/null)
 
 if [[ -z "$MATCH" || "$MATCH" == "{}" ]]; then
     log "No matching pane found for session: $SESSION"
-    log "Available panes: $(echo "$PANE_LIST" | python3 -c "import sys,json; [print(p.get('title','?'), p.get('cwd','?')) for p in json.load(sys.stdin)]" 2>/dev/null)"
+    log "Available panes: $(echo "$PANE_LIST" | python3 -c "import sys, json; [print(p.get('title','?'), p.get('cwd','?')) for p in json.load(sys.stdin)]" 2>/dev/null)"
     exit 0
 fi
 

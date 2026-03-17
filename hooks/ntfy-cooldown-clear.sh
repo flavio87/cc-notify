@@ -9,10 +9,11 @@ if [[ -n "$CWD" ]]; then
     PROJECT=$(basename "$CWD")
 fi
 
-COOLDOWN_FILE="/tmp/tap-to-tmux-cooldown/${PROJECT:-unknown}"
+_RUNTIME_BASE="${XDG_RUNTIME_DIR:-/tmp}"
+COOLDOWN_FILE="${_RUNTIME_BASE}/tap-to-tmux-cooldown/${PROJECT:-unknown}"
 if [[ -f "$COOLDOWN_FILE" ]]; then
     rm -f "$COOLDOWN_FILE"
-    mkdir -p /tmp/tap-to-tmux-logs
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Cooldown cleared for ${PROJECT}" >> /tmp/tap-to-tmux-logs/cooldown-clear.log
+    mkdir -p "${_RUNTIME_BASE}/tap-to-tmux-logs"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] Cooldown cleared for ${PROJECT}" >> "${_RUNTIME_BASE}/tap-to-tmux-logs/cooldown-clear.log"
 fi
 exit 0

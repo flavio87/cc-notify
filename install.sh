@@ -13,8 +13,15 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tap-to-tmux"
 mkdir -p "$CONFIG_DIR"
 if [[ ! -f "$CONFIG_DIR/config.env" ]]; then
     cp "$SCRIPT_DIR/config.env" "$CONFIG_DIR/config.env"
-    echo "Created $CONFIG_DIR/config.env — EDIT THIS with your settings"
+    chmod 600 "$CONFIG_DIR/config.env"
+    echo "Created $CONFIG_DIR/config.env (mode 600) — EDIT THIS with your settings"
 else
+    # Warn if existing config has overly permissive permissions
+    _perms=$(stat -c%a "$CONFIG_DIR/config.env" 2>/dev/null || stat -f%Lp "$CONFIG_DIR/config.env" 2>/dev/null)
+    if [[ "$_perms" != "600" && "$_perms" != "400" ]]; then
+        echo "WARNING: $CONFIG_DIR/config.env has permissions $_perms (should be 600)"
+        echo "  Fix with: chmod 600 $CONFIG_DIR/config.env"
+    fi
     echo "Config already exists at $CONFIG_DIR/config.env (skipped)"
 fi
 
