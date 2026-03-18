@@ -82,6 +82,90 @@ normalize_agent_type() {
     esac
 }
 
+# Detect pane content changes for stale agents.
+# Called when activity=stale and effective_state=WAITING and no state transition occurred.
+# Uses a settle timer: pane hash must be stable for STALE_SETTLE_SECS before notifying.
+# State is tracked in two extra files per pane:
+#   STATE_DIR/{session}_{pane}.hash    — hash at time of last notification (or startup)
+#   STATE_DIR/{session}_{pane}.pending — "<hash>\n<timestamp>" of pending (changing) content
+#
+# Note: ntm health reports agent_type=user for both CC (bun→claude) and codex (node→codex)
+# when stale. We resolve the real type via /proc to skip CC panes (handled by CC hook).
+_pane_is_cc() {
+    local session="$1" pane="$2"
+    local pane_cmd pane_pid child_pid cmdline
+    pane_cmd=$(tmux list-panes -t "${session}:1.${pane}" -F '#{pane_current_command}' 2>/dev/null)
+    [[ "$pane_cmd" != "bun" && "$pane_cmd" != "node" ]] && return 1
+    pane_pid=$(tmux list-panes -t "${session}:1.${pane}" -F '#{pane_pid}' 2>/dev/null)
+    [[ -z "$pane_pid" ]] && return 1
+    child_pid=$(pgrep -P "$pane_pid" 2>/dev/null | head -1)
+    [[ -z "$child_pid" ]] && return 1
+    cmdline=$(tr '\0' ' ' < "/proc/${child_pid}/cmdline" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    [[ "$cmdline" == *claude* ]]
+}
+
+check_stale_content_change() {
+    local session="$1" pane="$2" agent_type="$3"
+
+    # Skip CC panes — tmux-notify.sh hook handles Claude Code with richer transcript context
+    if _pane_is_cc "$session" "$pane"; then
+        ntfy_log DEBUG "STALE_SKIP_CC: ${session}/p${pane} is a Claude Code pane"
+        return
+    fi
+    local hash_file="${STATE_DIR}/${session}_${pane}.hash"
+    local pending_file="${STATE_DIR}/${session}_${pane}.pending"
+    local settle_secs="${STALE_SETTLE_SECS:-10}"
+
+    local current_hash
+    current_hash=$(tmux capture-pane -t "${session}:1.${pane}" -p -S -100 2>/dev/null \
+        | md5sum | awk '{print $1}')
+    [[ -z "$current_hash" ]] && return
+
+    # Initialize on first call: store current hash, no notification
+    if [[ ! -f "$hash_file" ]]; then
+        echo "$current_hash" > "$hash_file"
+        ntfy_log DEBUG "STALE_INIT: ${session}/p${pane} hash initialized"
+        return
+    fi
+
+    local notified_hash
+    notified_hash=$(cat "$hash_file")
+
+    # Content unchanged since last notification — nothing to do
+    if [[ "$current_hash" == "$notified_hash" ]]; then
+        rm -f "$pending_file"
+        return
+    fi
+
+    # Content differs from last notification — track stability
+    local pending_hash="" pending_since=0
+    if [[ -f "$pending_file" ]]; then
+        pending_hash=$(sed -n '1p' "$pending_file")
+        pending_since=$(sed -n '2p' "$pending_file")
+    fi
+
+    if [[ "$current_hash" != "$pending_hash" ]]; then
+        # Hash changed (or first time seeing new content) — reset settle timer
+        printf '%s\n%s\n' "$current_hash" "$(date +%s)" > "$pending_file"
+        ntfy_log DEBUG "STALE_PENDING: ${session}/p${pane} new hash, settling timer reset"
+        return
+    fi
+
+    # Same pending hash — check if settled long enough
+    local now elapsed
+    now=$(date +%s)
+    elapsed=$(( now - ${pending_since:-$now} ))
+    if [[ "$elapsed" -ge "$settle_secs" ]]; then
+        # Settled: update notified hash and fire notification
+        echo "$current_hash" > "$hash_file"
+        rm -f "$pending_file"
+        ntfy_log INFO "STALE_COMPLETE: ${session}/p${pane} [${agent_type}]: content settled after ${elapsed}s → notifying"
+        send_agent_notification "$session" "$pane" "$agent_type" "WAITING"
+    else
+        ntfy_log DEBUG "STALE_SETTLING: ${session}/p${pane} settling ${elapsed}/${settle_secs}s"
+    fi
+}
+
 check_and_notify() {
     local session="$1"
     local json
@@ -124,6 +208,7 @@ check_and_notify() {
 
         local state_file="${STATE_DIR}/${session}_${pane}"
 
+        ntfy_log DEBUG "BRANCH_CHECK: ${session}/p${pane} effective_state=${effective_state}"
         if [[ "$effective_state" == "ACTIVE" ]]; then
             # Agent is working — clear state so next idle triggers notification
             rm -f "$state_file"
@@ -145,6 +230,13 @@ check_and_notify() {
                 else
                     ntfy_log INFO "INITIAL: ${session}/p${pane} [${agent_type}]: ${effective_state} (captured, no notification)"
                 fi
+            fi
+
+            # For stale agents: state machine can't detect activity (ntm never reports
+            # active). Use pane content hashing with a settle timer to detect completions.
+            ntfy_log DEBUG "STALE_CHECK: ${session}/p${pane} activity=${activity} IC=${INITIAL_CAPTURE:-0}"
+            if [[ "$activity" == "stale" && "${INITIAL_CAPTURE:-0}" != "1" ]]; then
+                check_stale_content_change "$session" "$pane" "$agent_type"
             fi
         fi
     done
