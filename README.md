@@ -271,6 +271,7 @@ All settings live in `~/.config/tap-to-tmux/config.env`:
 | `SSH_HOST` | No | Hostname/IP for deep link SSH commands. Defaults to hostname. On macOS with Tailscale, set this to your Tailscale MagicDNS name (e.g. `my-mac.tail1234.ts.net`). |
 | `SSH_REMOTE_HOME` | No | Home directory path on the remote machine. Defaults to `/home/$SSH_USER`. **macOS users must set this** to `/Users/$SSH_USER` since macOS uses `/Users/` not `/home/`. |
 | `NTFY_SERVER` | No | ntfy server URL. Defaults to `https://ntfy.sh` (public). Set to your self-hosted URL if desired. |
+| `NTFY_TOKEN` | No | Auth token for self-hosted ntfy servers with access control (`auth-default-access: deny`). Create one with `ntfy token add --label="tap-to-tmux" USERNAME`. Not needed for the public ntfy.sh server. |
 | `BLINK_KEY` | No | Blink Shell x-callback-url key for tap-to-connect on iOS. Leave empty to disable deep links. |
 | `SLACK_WEBHOOK_URL` | No | Slack incoming webhook URL for dual delivery. Leave empty to disable. |
 | `PROJECTS_DIR` | No | Directory containing your project repos. Defaults to `$HOME/projects`. Used by the NTM monitor for session matching. |
@@ -446,6 +447,9 @@ ntfy-health-check.sh --send-test  # also send a test notification
 2. Check `NTFY_TOPIC` in your config matches the topic you subscribed to in the ntfy app
 3. Check logs: `cat /tmp/tap-to-tmux-logs/tmux-notify.log`
 
+**Notifications return 403 on self-hosted ntfy:**
+- Your server likely has `auth-default-access: deny`. Each machine's unique topic needs an ACL entry, or the machine needs an `NTFY_TOKEN` in its `config.env`. The server machine may work without a token if anonymous has explicit access to its topic, but remote machines (MacBook, etc.) will get 403 for their own topics. See [Self-hosted ntfy server](#self-hosted-ntfy-server).
+
 **Duplicate notifications:**
 - The cooldown system should prevent these. Check: `ls -la /tmp/tap-to-tmux-cooldown/`
 - Default cooldown is 24h. Override with `NTFY_COOLDOWN_SECONDS` in config.
@@ -505,6 +509,21 @@ docker compose up -d
 ```
 
 Edit `server/server.yml` with your domain, then set `NTFY_SERVER` in your config.
+
+If your server uses `auth-default-access: deny` (recommended), create a user and token:
+
+```bash
+# Inside the container
+docker exec -e NTFY_PASSWORD=yourpassword ntfy ntfy user add --role=user tap-to-tmux
+docker exec ntfy ntfy token add --label="tap-to-tmux" tap-to-tmux
+docker exec ntfy ntfy access tap-to-tmux "your-topic-name" rw
+```
+
+Add the token to `config.env` on every machine that publishes to this server:
+
+```bash
+NTFY_TOKEN="tk_yourtokenhere"
+```
 
 ## Receiving notifications on desktop
 
