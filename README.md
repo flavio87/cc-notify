@@ -271,7 +271,7 @@ All settings live in `~/.config/tap-to-tmux/config.env`:
 | `SSH_HOST` | No | Hostname/IP for deep link SSH commands. Defaults to hostname. On macOS with Tailscale, set this to your Tailscale MagicDNS name (e.g. `my-mac.tail1234.ts.net`). |
 | `SSH_REMOTE_HOME` | No | Home directory path on the remote machine. Defaults to `/home/$SSH_USER`. **macOS users must set this** to `/Users/$SSH_USER` since macOS uses `/Users/` not `/home/`. |
 | `NTFY_SERVER` | No | ntfy server URL. Defaults to `https://ntfy.sh` (public). Set to your self-hosted URL if desired. |
-| `NTFY_TOKEN` | No | Auth token for self-hosted ntfy servers with access control (`auth-default-access: deny`). Create one with `ntfy token add --label="tap-to-tmux" USERNAME`. Not needed for the public ntfy.sh server. |
+| `NTFY_TOKEN` | No | Auth token for self-hosted ntfy servers with access control (`auth-default-access: deny`). Generate via `docker exec ntfy ntfy token add USERNAME`. Not needed for the public ntfy.sh server. |
 | `BLINK_KEY` | No | Blink Shell x-callback-url key for tap-to-connect on iOS. Leave empty to disable deep links. |
 | `SLACK_WEBHOOK_URL` | No | Slack incoming webhook URL for dual delivery. Leave empty to disable. |
 | `PROJECTS_DIR` | No | Directory containing your project repos. Defaults to `$HOME/projects`. Used by the NTM monitor for session matching. |
@@ -447,8 +447,14 @@ ntfy-health-check.sh --send-test  # also send a test notification
 2. Check `NTFY_TOPIC` in your config matches the topic you subscribed to in the ntfy app
 3. Check logs: `cat /tmp/tap-to-tmux-logs/tmux-notify.log`
 
-**Notifications return 403 on self-hosted ntfy:**
-- Your server likely has `auth-default-access: deny`. Each machine's unique topic needs an ACL entry, or the machine needs an `NTFY_TOKEN` in its `config.env`. The server machine may work without a token if anonymous has explicit access to its topic, but remote machines (MacBook, etc.) will get 403 for their own topics. See [Self-hosted ntfy server](#self-hosted-ntfy-server).
+**Notifications arrive but show no content (empty body on iOS):**
+- Your ntfy server requires authentication. The app is receiving the push ping but getting 403 when fetching the message body.
+- Fix: re-subscribe in the ntfy app with username + password. See [Subscribing on iOS with a self-hosted authenticated server](#subscribing-on-ios-with-a-self-hosted-authenticated-server).
+
+**HTTP 403 errors in the notification log:**
+- Check `cat /tmp/tap-to-tmux-logs/ntfy-notify.log` for `FAILED HTTP 403` lines.
+- Your server likely has `auth-default-access: deny`. Each machine's unique topic needs an ACL entry, or the machine needs an `NTFY_TOKEN` in its `config.env`. The server machine may work without a token if anonymous has explicit access to its topic, but remote machines (MacBook, etc.) will get 403 for their own topics.
+- Fix: set `NTFY_TOKEN` in `~/.config/tap-to-tmux/config.env` and grant the user access: `docker exec ntfy ntfy access <user> <topic> rw`. See [Self-hosted ntfy server](#self-hosted-ntfy-server).
 
 **Duplicate notifications:**
 - The cooldown system should prevent these. Check: `ls -la /tmp/tap-to-tmux-cooldown/`
@@ -510,20 +516,40 @@ docker compose up -d
 
 Edit `server/server.yml` with your domain, then set `NTFY_SERVER` in your config.
 
-If your server uses `auth-default-access: deny` (recommended), create a user and token:
+### Authentication (self-hosted)
+
+If your server uses `auth-default-access: deny` (recommended), create a user and grant topic access:
 
 ```bash
-# Inside the container
+# Create a user (password set via env var to avoid interactive prompt)
 docker exec -e NTFY_PASSWORD=yourpassword ntfy ntfy user add --role=user tap-to-tmux
+
+# Grant read-write access to your topic
+docker exec ntfy ntfy access tap-to-tmux your-topic-name rw
+
+# Create an access token (used by tap-to-tmux scripts to publish)
 docker exec ntfy ntfy token add --label="tap-to-tmux" tap-to-tmux
-docker exec ntfy ntfy access tap-to-tmux "your-topic-name" rw
 ```
 
-Add the token to `config.env` on every machine that publishes to this server:
+Add the generated token (`tk_...`) to `~/.config/tap-to-tmux/config.env` on every machine that publishes to this server:
 
 ```bash
 NTFY_TOKEN="tk_yourtokenhere"
 ```
+
+### Subscribing on iOS with a self-hosted authenticated server
+
+The ntfy iOS app requires a **username and password** to subscribe to a protected topic — it does not support token-only auth in its subscribe dialog. Use the password you set when creating the user above.
+
+In the ntfy iOS app:
+1. Tap **+** → enter your server URL (e.g. `https://ntfy.yourdomain.com`)
+2. Enter your topic name
+3. When prompted for credentials: **username** = your ntfy username, **password** = the password you set
+4. Tap Subscribe
+
+The iOS app will use those credentials to fetch message content. The access token (`NTFY_TOKEN`) is used separately by tap-to-tmux scripts to publish notifications from your server/machines.
+
+> **Troubleshooting:** If you receive empty push notifications (no body content visible), the app is likely subscribed without auth — it receives the push ping but gets 403 when fetching the message. Delete and re-add the subscription with credentials.
 
 ## Receiving notifications on desktop
 
