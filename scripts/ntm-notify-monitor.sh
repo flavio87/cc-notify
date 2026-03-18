@@ -94,9 +94,10 @@ normalize_agent_type() {
 _pane_is_cc() {
     local session="$1" pane="$2"
     local pane_cmd pane_pid child_pid cmdline
-    pane_cmd=$(tmux list-panes -t "${session}:1.${pane}" -F '#{pane_current_command}' 2>/dev/null)
+    # display-message targets a specific pane; list-panes would list all panes in the window
+    pane_cmd=$(tmux display-message -t "${session}:1.${pane}" -p '#{pane_current_command}' 2>/dev/null)
     [[ "$pane_cmd" != "bun" && "$pane_cmd" != "node" ]] && return 1
-    pane_pid=$(tmux list-panes -t "${session}:1.${pane}" -F '#{pane_pid}' 2>/dev/null)
+    pane_pid=$(tmux display-message -t "${session}:1.${pane}" -p '#{pane_pid}' 2>/dev/null)
     [[ -z "$pane_pid" ]] && return 1
     child_pid=$(pgrep -P "$pane_pid" 2>/dev/null | head -1)
     [[ -z "$child_pid" ]] && return 1
@@ -221,8 +222,11 @@ check_and_notify() {
                 # Only notify if not initial run
                 if [[ "${INITIAL_CAPTURE:-0}" != "1" ]]; then
                     # Skip claude agents — CC hook handles those with richer context
+                    # Skip stale agents — STALE_COMPLETE handles with settled context (avoids double-notify)
                     if [[ "$agent_type" == "claude" ]]; then
                         ntfy_log INFO "SKIP: ${session}/p${pane} [${agent_type}]: ${effective_state} (CC hook handles)"
+                    elif [[ "$activity" == "stale" ]]; then
+                        ntfy_log INFO "SKIP_STALE: ${session}/p${pane} [${agent_type}]: ${effective_state} (stale content mechanism handles)"
                     else
                         ntfy_log INFO "TRANSITION: ${session}/p${pane} [${agent_type}]: ${old_state:-NEW} -> ${effective_state}"
                         send_agent_notification "$session" "$pane" "$agent_type" "$effective_state"
