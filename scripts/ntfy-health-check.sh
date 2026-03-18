@@ -40,7 +40,10 @@ fi
 
 echo ""
 echo "=== ntfy Server ==="
-http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${NTFY_URL}" 2>/dev/null)
+_health_curl_args=(-s -o /dev/null -w '%{http_code}' --max-time 5)
+[[ -n "${NTFY_TOKEN:-}" ]] && _health_curl_args+=(-H "Authorization: Bearer ${NTFY_TOKEN}")
+_health_curl_args+=("${NTFY_URL}")
+http_code=$(curl "${_health_curl_args[@]}" 2>/dev/null)
 if [[ "$http_code" == "200" || "$http_code" == "405" ]]; then
     ok "Server reachable (HTTP ${http_code})"
 else
